@@ -5,11 +5,11 @@ const logout = async (req, res) => {
 
   const { all } = req.query;
 
-  if (!all) {
+  if (all === "false") {
     await User.findByIdAndUpdate(_id, { token: "" });
   }
 
-  if (all) {
+  if (all === "true") {
     await User.updateMany({ token: "" });
   }
 
