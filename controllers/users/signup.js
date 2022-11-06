@@ -1,6 +1,6 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { User, joiSchemas } = require("../../models/users");
+const { User, joiSchemas } = require("../../models/user");
 const createError = require("../../helpers/createError");
 
 const { SECRET_KEY } = process.env;
@@ -9,30 +9,39 @@ const signup = async (req, res, next) => {
   try {
     const { id, password } = req.body;
 
-    // Перевіряємо, чи є користувач з таким email.
     const user = await User.findOne({ id });
 
     if (user) {
       throw createError(409, `${id} in use`);
     }
 
-    // Перевіряємо тіло запиту за допомогою joi
-    const { error } = joiSchemas.signup.validate(req.body);
-    if (error) {
-      throw createError(400, error.message);
+    let idType;
+
+    const joiEmail = joiSchemas.signupEmail.validate(req.body);
+    const joiPhone = joiSchemas.signupPhone.validate(req.body);
+
+    if (!joiEmail.error && joiPhone.error) {
+      idType = "email";
     }
 
-    // Хешуємо пароль
+    if (!joiPhone.error && joiEmail.error) {
+      idType = "phone";
+    }
+
+    if (joiPhone.error && joiEmail.error) {
+      throw createError(
+        400,
+        "Fails to match the required email or phone pattern"
+      );
+    }
+
     const hashPassword = await bcrypt.hash(password, 10);
 
-    // Якщо немає користувача з таким емейл, то зберігаємо користувача в колекціїю users
-    // В result нам поаертається об'єкт з такими ж полями, як прописані в схемі моделі + id
     const result = await User.create({
       ...req.body,
       password: hashPassword,
+      id_type: idType,
     });
-
-    console.log(result);
 
     // Create token
     const payload = {
@@ -44,8 +53,7 @@ const signup = async (req, res, next) => {
 
     await User.findByIdAndUpdate(result._id, { token });
 
-    // Повертаэмо на фронтенд об'єкт user(нижче)
-    res.status(201).json({ token });
+    res.status(201).json({ token, id_type: idType });
   } catch (error) {
     next(error);
   }
